@@ -104,4 +104,4 @@ Don't use VC++ 6: it creates faulty code in core_normal.cpp
 Later Visual Studio versions work fine (vs2003/.net, vs2005, vs2008)
 
 Build instructions for webOS via scratchbox2
-./configure --with-sdl-prefix=/usr/local --disable-alsa-mid
+./configure --with-sdl-prefix=/usr/local --disable-alsa-midi
