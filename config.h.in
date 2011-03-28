@@ -92,9 +92,6 @@
 /* Define to 1 to use a unaligned memory access */
 #undef C_UNALIGNED_MEMORY
 
-/* define to 1 if you have XKBlib.h and X11 lib */
-#undef C_X11_XKB
-
 /* libm doesn't include powf */
 #undef DB_HAVE_NO_POWF
 
