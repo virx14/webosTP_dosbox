@@ -1,5 +1,5 @@
 {
-    "title":    "DOSBOX",
+    "title":    "DosBox",
     "type":     "web",
     "main":     "start-dosbox.sh",
     "id":       "com.dosbox.dosbox",
