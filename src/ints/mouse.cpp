@@ -489,21 +489,23 @@ void Mouse_CursorMoved(float xrel,float yrel,float x,float y,bool emulate) {
 	DrawCursor();
 }
 
-void Mouse_CursorMoved2(int clipw, int cliph, int x, int y)
+void Mouse_CursorMoved2(int clipw, int cliph, int x, int y, bool rel)
 {
     mouse.x = ((float)mouse.max_x * x) / clipw;
     mouse.y = ((float)mouse.max_y * y) / cliph;
 
 #if 0
-    printf("pos [px:%2.2f py:%2.2f cx:%2.2f cy:%2.2f]\n",
+    printf("pos [px:%2.2f py:%2.2f cx:%2.2f cy:%2.2f ",
             mouse.prev_x, mouse.prev_y, mouse.x, mouse.y);
 #endif
 
-	mouse.mickey_x += mouse.x - mouse.prev_x;
-	mouse.mickey_y += mouse.y - mouse.prev_y;
+    if(rel == true) {
+        mouse.mickey_x += mouse.x - mouse.prev_x;
+        mouse.mickey_y += mouse.y - mouse.prev_y;
+    }
 
 #if 0
-    printf("mic [mx:%2.2f my:%2.2f]\n", mouse.mickey_x, mouse.mickey_y);
+    printf("mic mx:%2.2f my:%2.2f]\n", mouse.mickey_x, mouse.mickey_y);
 #endif
 
     mouse.prev_x = mouse.x;
@@ -611,6 +613,11 @@ void Mouse_NewVideoMode(void) {
 	/* Get the correct resolution from the current video mode */
 	Bit8u mode=mem_readb(BIOS_VIDEO_MODE);
 	if(mode == mouse.mode) {LOG(LOG_MOUSE,LOG_NORMAL)("New video is the same as the old"); /*return;*/}
+
+#if 0
+    printf("new video mode:%x\n", mode);
+#endif
+
 	switch (mode) {
 	case 0x00:
 	case 0x01:
@@ -629,10 +636,12 @@ void Mouse_NewVideoMode(void) {
 	case 0x09:
 	case 0x0a:
 	case 0x0d:
-	case 0x0e:
 	case 0x13:
 		mouse.max_y=199;
 		break;
+	case 0x0e:
+		mouse.max_y=399;
+        break;
 	case 0x0f:
 	case 0x10:
 		mouse.max_y=349;

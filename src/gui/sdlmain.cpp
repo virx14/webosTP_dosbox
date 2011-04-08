@@ -1356,6 +1356,8 @@ void Mouse_AutoLock(bool enable) {
 }
 
 static void HandleMouseMotion(SDL_MouseMotionEvent * motion) {
+    bool rel = false;
+
 	if (sdl.mouse.locked || !sdl.mouse.autoenable) {
         if(sdl.desktop.want_type == SCREEN_OPENGL) {
             Uint16 x, y;
@@ -1363,29 +1365,17 @@ static void HandleMouseMotion(SDL_MouseMotionEvent * motion) {
             x = motion->x;
             y = motion->y;
 
-#if 0
-            printf("_C_DEBUG_ before - [w:%d h:%d motion->x:%d motion->y:%d]\n",
-                    sdl.draw.width-1, sdl.draw.height-1, motion->x, motion->y);
-#endif
-
+            /* swap coordinate from vertical to horizontal */
             motion->x = y;
             motion->y = (screenMetrics.horizontalPixels -1) - x;
-
-#if 0
-            printf("_C_DEBUG_ mid - [w:%d h:%d motion->x:%d motion->y:%d]\n",
-                    sdl.draw.width-1, sdl.draw.height-1, motion->x, motion->y);
-#endif
 
             motion->x = ((sdl.draw.width-1) * motion->x) / (screenMetrics.verticalPixels - 1);
             motion->y = ((sdl.draw.height-1) * motion->y) / (screenMetrics.horizontalPixels - 1);
 
-#if 0
-            printf("_C_DEBUG_ after  - [w:%d h:%d motion->x:%d motion->y:%d]\n",
-                    sdl.draw.width-1, sdl.draw.height-1, motion->x, motion->y);
-#endif
+            rel = true;
         }
 
-        Mouse_CursorMoved2(sdl.draw.width-1, sdl.draw.height-1, motion->x, motion->y);
+        Mouse_CursorMoved2(sdl.draw.width-1, sdl.draw.height-1, motion->x, motion->y, rel);
     }
 }
 
