@@ -35,6 +35,7 @@
 
 #include "cross.h"
 #include "SDL.h"
+#include "PDL.h"
 
 #include "dosbox.h"
 #include "video.h"
@@ -57,8 +58,13 @@
 #undef SDL_HWSURFACE
 #define SDL_HWSURFACE SDL_SWSURFACE
 
+PDL_ScreenMetrics screenMetrics;
+
 #if C_OPENGL
-#include "SDL_opengl.h"
+#include "SDL_opengles.h"
+#define TEXSIZE         128
+#define MAX_TEXTURES    48
+#define MAX_VERTICES    128
 
 #ifndef APIENTRY
 #define APIENTRY
@@ -185,8 +191,7 @@ struct SDL_Block {
 	struct {
 		Bitu pitch;
 		void * framebuf;
-		GLuint texture;
-		GLuint displaylist;
+		GLuint textures[MAX_TEXTURES];
 		GLint max_texsize;
 		bool bilinear;
 		bool packed_pixel;
@@ -228,6 +233,30 @@ struct SDL_Block {
 };
 
 static SDL_Block sdl;
+
+#if C_OPENGL
+int gl_texsize = TEXSIZE;
+int gl_texcols = 0;
+int gl_texrows = 0;
+
+GLfloat gl_vertices[MAX_VERTICES*4*2];
+GLfloat gl_texcoords[4*2] = 
+{
+		0.004f, 0.004f,		// to center texels, offset by ( 0.5 * 1/gl_texsize )
+		0.996f, 0.004f,
+		0.996f, 0.996f,
+		0.004f, 0.996f
+};
+GLfloat gl_coords[4*2] = 
+{
+		0.0f, 0.0f,
+		1.0f, 0.0f,
+		1.0f, 1.0f,
+		0.0f, 1.0f
+};
+
+Bit8u gl_tempbuff[128*128*4];
+#endif
 
 static bool metaLocked[2];
 static long long pressTime[2], keyInterval[2]; /* 0: ALT, 1: CTRL */
@@ -576,51 +605,47 @@ dosurface:
 			free(sdl.opengl.framebuf);
 		}
 		sdl.opengl.framebuf=0;
-		if (!(flags&GFX_CAN_32) || (flags & GFX_RGBONLY)) goto dosurface;
-		int texsize=2 << int_log2(width > height ? width : height);
-		if (texsize>sdl.opengl.max_texsize) {
-			LOG_MSG("SDL:OPENGL:No support for texturesize of %d, falling back to surface",texsize);
-			goto dosurface;
-		}
+
 		SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
 #if defined (WIN32) && SDL_VERSION_ATLEAST(1, 2, 11)
 		SDL_GL_SetAttribute( SDL_GL_SWAP_CONTROL, 0 );
 #endif
-		GFX_SetupSurfaceScaled(SDL_OPENGL,0);
-		if (!sdl.surface || sdl.surface->format->BitsPerPixel<15) {
-			LOG_MSG("SDL:OPENGL:Can't open drawing surface, are you running in 16bpp(or higher) mode?");
-			goto dosurface;
-		}
+        sdl.surface=SDL_SetVideoMode(640,400,0,SDL_OPENGL);
 		/* Create the texture and display list */
 #if defined(NVIDIA_PixelDataRange)
 		if (sdl.opengl.pixel_data_range) {
 			sdl.opengl.framebuf=db_glAllocateMemoryNV(width*height*4,0.0,1.0,1.0);
 			glPixelDataRangeNV(GL_WRITE_PIXEL_DATA_RANGE_NV,width*height*4,sdl.opengl.framebuf);
 			glEnableClientState(GL_WRITE_PIXEL_DATA_RANGE_NV);
-		} else {
-#else
-		{
-#endif
-			sdl.opengl.framebuf=malloc(width*height*4);		//32 bit color
 		}
-		sdl.opengl.pitch=width*4;
-		glViewport(sdl.clip.x,sdl.clip.y,sdl.clip.w,sdl.clip.h);
-		glMatrixMode (GL_PROJECTION);
-		glDeleteTextures(1,&sdl.opengl.texture);
- 		glGenTextures(1,&sdl.opengl.texture);
-		glBindTexture(GL_TEXTURE_2D,sdl.opengl.texture);
-		// No borders
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-		if (sdl.opengl.bilinear) {
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		} else {
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		}
+#endif 
+			
+		glViewport(0, 0, screenMetrics.horizontalPixels,screenMetrics.verticalPixels);
 
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, texsize, texsize, 0, GL_BGRA_EXT, GL_UNSIGNED_BYTE, 0);
+		glMatrixMode (GL_PROJECTION);
+
+		if(gl_texcols*gl_texrows > 0) {
+			glDeleteTextures(gl_texcols*gl_texrows,sdl.opengl.textures);
+        }
+		
+		gl_texcols = width/gl_texsize;
+		gl_texrows = height/gl_texsize;
+		if(gl_texcols*gl_texsize<width) 	gl_texcols++;
+		if(gl_texrows*gl_texsize<height) 	gl_texrows++;
+		
+		sdl.opengl.framebuf=malloc(gl_texcols*gl_texsize*gl_texrows*gl_texsize*4);		//32 bit color
+		sdl.opengl.pitch=gl_texcols*gl_texsize*4;
+				
+ 		glGenTextures(gl_texcols*gl_texrows,sdl.opengl.textures);
+
+        for(int cTex=0; cTex<gl_texcols*gl_texrows; cTex++) {
+            glBindTexture(GL_TEXTURE_2D,sdl.opengl.textures[cTex]);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_BGRA, gl_texsize, gl_texsize, 0, GL_BGRA, GL_UNSIGNED_BYTE, 0);
+        }
+
+        glRotatef(-90.0f, 0.0f, 0.0f, 1.0f);
 
 		glClearColor (0.0, 0.0, 0.0, 1.0);
 		glClear(GL_COLOR_BUFFER_BIT);
@@ -634,24 +659,50 @@ dosurface:
 		glMatrixMode (GL_MODELVIEW);
 		glLoadIdentity ();
 
-		GLfloat tex_width=((GLfloat)(width)/(GLfloat)texsize);
-		GLfloat tex_height=((GLfloat)(height)/(GLfloat)texsize);
+		glEnableClientState( GL_VERTEX_ARRAY        );
+		glEnableClientState( GL_TEXTURE_COORD_ARRAY );
+		
+		float glx,gly,glw,glh;
+		glx = gly = -1.0f;
+		glw = glh = 2.0f;
 
-		if (glIsList(sdl.opengl.displaylist)) glDeleteLists(sdl.opengl.displaylist, 1);
-		sdl.opengl.displaylist = glGenLists(1);
-		glNewList(sdl.opengl.displaylist, GL_COMPILE);
-		glBindTexture(GL_TEXTURE_2D, sdl.opengl.texture);
-		glBegin(GL_QUADS);
-		// lower left
-		glTexCoord2f(0,tex_height); glVertex2f(-1.0f,-1.0f);
-		// lower right
-		glTexCoord2f(tex_width,tex_height); glVertex2f(1.0f, -1.0f);
-		// upper right
-		glTexCoord2f(tex_width,0); glVertex2f(1.0f, 1.0f);
-		// upper left
-		glTexCoord2f(0,0); glVertex2f(-1.0f, 1.0f);
-		glEnd();
-		glEndList();
+		int cTile = 0;
+		float tilew = glw / gl_texcols;
+		float tileh = glh / gl_texrows;
+		tilew *= (float)(gl_texcols*gl_texsize)/(float)width;
+		tileh *= (float)(gl_texrows*gl_texsize)/(float)height;
+		float offx = glx;
+		float offy = gly;
+
+#if 0
+        printf("gl_texcols:%d gl_texrows:%d gl_texsize:%d width:%d height:%d tilew:%3.2f tileh:%3.2f\n",
+                gl_texcols, gl_texrows, gl_texsize, width, height, tilew, tileh);
+#endif
+
+        for(int cRow=0; cRow<gl_texcols; cRow++) {
+            offx = glx;
+            for(int cCol=0; cCol<gl_texcols; cCol++) {
+#if 0
+                printf("\n");
+#endif
+                float* coords = &(gl_vertices[cTile*4*2]);
+                for(int cVert = 0; cVert<4; cVert++) {
+                    coords[cVert*2+0] = (gl_coords[cVert*2+0] * tilew + offx);
+                    coords[cVert*2+1] = (gl_coords[cVert*2+1] * tileh + offy) * (-1.0f);
+
+#if 0
+                    printf("cTile:%3d offx:%5.2f offy:%5.2f cRow:%d cCol:%d cVert:%d-%d glcx:%2.1f glcy:%2.1f x:%5.2f y:%5.2f\n",
+                            cTile, offx, offy, cRow, cCol, cVert*2+0, cVert*2+1,
+                            gl_coords[cVert*2+0], gl_coords[cVert*2+1], coords[cVert*2+0], coords[cVert*2+1]);
+#endif
+
+                }
+                cTile++;
+                offx += tilew;
+            }
+            offy += tileh;
+        }
+
 		sdl.desktop.type=SCREEN_OPENGL;
 		retFlags = GFX_CAN_32 | GFX_SCALING;
 #if defined(NVIDIA_PixelDataRange)
@@ -796,8 +847,9 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
 				}
 				index++;
 			}
-			if (rectCount)
+			if (rectCount) {
 				SDL_UpdateRects( sdl.surface, rectCount, sdl.updateRects );
+            }
 		}
 		break;
 #if (HAVE_DDRAW_H) && defined(WIN32)
@@ -838,23 +890,60 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
 #endif
 		if (changedLines) {
 			Bitu y = 0, index = 0;
-            glBindTexture(GL_TEXTURE_2D, sdl.opengl.texture);
-			while (y < sdl.draw.height) {
+            while (y < sdl.draw.height) {
 				if (!(index & 1)) {
 					y += changedLines[index];
 				} else {
-					Bit8u *pixels = (Bit8u *)sdl.opengl.framebuf + y * sdl.opengl.pitch;
 					Bitu height = changedLines[index];
-					glTexSubImage2D(GL_TEXTURE_2D, 0, 0, y,
-						sdl.draw.width, height, GL_BGRA_EXT,
-						GL_UNSIGNED_INT_8_8_8_8_REV, pixels );
+					int start	= y; 
+					int end		= start+height;
+					while(start<end)
+						{
+						int startrow	= start / gl_texsize;
+						int endrow		= end   / gl_texsize;
+						int offsety		= start % gl_texsize;
+						int subheight	= (endrow>startrow) ? (gl_texsize-offsety) : (end-start);
+						int sy;
+						for(int cCol=0; cCol<gl_texcols; cCol++)
+							{
+							glBindTexture(GL_TEXTURE_2D, sdl.opengl.textures[startrow*gl_texcols+cCol]);
+							Bit8u* startpix = (Bit8u *)sdl.opengl.framebuf + 
+											  (startrow*gl_texsize+offsety)*sdl.opengl.pitch + 
+											  cCol*gl_texsize*4 ;
+							for(sy=0;sy<subheight;sy++)
+								{
+								memcpy( &(gl_tempbuff[sy*gl_texsize*4]), startpix, gl_texsize*4 );
+								startpix += (gl_texcols*gl_texsize*4);
+								}
+							glTexSubImage2D(GL_TEXTURE_2D, 0, 
+											0, offsety, 
+											gl_texsize, sy, 
+											GL_BGRA,
+											GL_UNSIGNED_BYTE, gl_tempbuff );
+							}
+						start += sy;
+						}
 					y += height;
 				}
 				index++;
 			}
-			glCallList(sdl.opengl.displaylist);
-			SDL_GL_SwapBuffers();
-		}
+			// do actual gl drawing here
+            glMatrixMode( GL_TEXTURE );
+            glLoadIdentity();
+                
+            int cTex = 0;
+            for(int cRow=0; cRow<gl_texrows; cRow++) {
+                for(int cCol=0; cCol<gl_texcols; cCol++) {
+                    GLfloat* verts = &(gl_vertices[cTex*4*2]); 
+                    glBindTexture(GL_TEXTURE_2D, sdl.opengl.textures[cTex]);
+                    glVertexPointer(   2, GL_FLOAT, 0, verts	);
+                    glTexCoordPointer( 2, GL_FLOAT, 0, gl_texcoords	);
+                    glDrawArrays( GL_TRIANGLE_FAN, 0, 4 );
+                    cTex++;
+                }
+            }
+            SDL_GL_SwapBuffers();
+        }
 		break;
 #endif
 	default:
@@ -1130,14 +1219,14 @@ static void GUI_StartUp(Section * sec) {
 	sdl.overlay=0;
 #if C_OPENGL
    if(sdl.desktop.want_type==SCREEN_OPENGL){ /* OPENGL is requested */
+       SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 1); 
 	sdl.surface=SDL_SetVideoMode(640,400,0,SDL_OPENGL);
 	if (sdl.surface == NULL) {
 		LOG_MSG("Could not initialize OpenGL, switching back to surface");
 		sdl.desktop.want_type=SCREEN_SURFACE;
 	} else {
 	sdl.opengl.framebuf=0;
-	sdl.opengl.texture=0;
-	sdl.opengl.displaylist=0;
+	for(int i = 0; i<MAX_TEXTURES; i++) sdl.opengl.textures[i] = 0;
 	glGetIntegerv (GL_MAX_TEXTURE_SIZE, &sdl.opengl.max_texsize);
 #if defined(__WIN32__) && defined(NVIDIA_PixelDataRange)
 	glPixelDataRangeNV = (PFNGLPIXELDATARANGENVPROC) wglGetProcAddress("glPixelDataRangeNV");
@@ -1267,8 +1356,37 @@ void Mouse_AutoLock(bool enable) {
 }
 
 static void HandleMouseMotion(SDL_MouseMotionEvent * motion) {
-	if (sdl.mouse.locked || !sdl.mouse.autoenable)
-        Mouse_CursorMoved2(sdl.clip.w-1, sdl.clip.h-1, motion->x, motion->y);
+	if (sdl.mouse.locked || !sdl.mouse.autoenable) {
+        if(sdl.desktop.want_type == SCREEN_OPENGL) {
+            Uint16 x, y;
+
+            x = motion->x;
+            y = motion->y;
+
+#if 0
+            printf("_C_DEBUG_ before - [w:%d h:%d motion->x:%d motion->y:%d]\n",
+                    sdl.draw.width-1, sdl.draw.height-1, motion->x, motion->y);
+#endif
+
+            motion->x = y;
+            motion->y = (screenMetrics.horizontalPixels -1) - x;
+
+#if 0
+            printf("_C_DEBUG_ mid - [w:%d h:%d motion->x:%d motion->y:%d]\n",
+                    sdl.draw.width-1, sdl.draw.height-1, motion->x, motion->y);
+#endif
+
+            motion->x = ((sdl.draw.width-1) * motion->x) / (screenMetrics.verticalPixels - 1);
+            motion->y = ((sdl.draw.height-1) * motion->y) / (screenMetrics.horizontalPixels - 1);
+
+#if 0
+            printf("_C_DEBUG_ after  - [w:%d h:%d motion->x:%d motion->y:%d]\n",
+                    sdl.draw.width-1, sdl.draw.height-1, motion->x, motion->y);
+#endif
+        }
+
+        Mouse_CursorMoved2(sdl.draw.width-1, sdl.draw.height-1, motion->x, motion->y);
+    }
 }
 
 static void HandleMouseButton(SDL_MouseButtonEvent * button) {
@@ -1804,6 +1922,11 @@ int main(int argc, char* argv[]) {
 		) < 0 ) E_Exit("Can't init SDL %s",SDL_GetError());
 	sdl.inited = true;
 
+#if C_OPENGL
+    PDL_Init(0);
+	PDL_GetScreenMetrics(&screenMetrics);
+#endif
+
 #ifndef DISABLE_JOYSTICK
 	//Initialise Joystick seperately. This way we can warn when it fails instead
 	//of exiting the application
@@ -1951,6 +2074,7 @@ int main(int argc, char* argv[]) {
 	SDL_WM_GrabInput(SDL_GRAB_OFF);
 	SDL_ShowCursor(SDL_ENABLE);
 
+    PDL_Quit();
 	SDL_Quit();//Let's hope sdl will quit as well when it catches an exception
 	return 0;
 }

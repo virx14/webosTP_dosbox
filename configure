@@ -6804,13 +6804,13 @@ $as_echo "$as_me: WARNING: Can't find SDL_net, internal modem and ipx disabled" 
 fi
 
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lGL" >&5
-$as_echo_n "checking for main in -lGL... " >&6; }
-if test "${ac_cv_lib_GL_main+set}" = set; then :
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for main in -lGLES_CM" >&5
+$as_echo_n "checking for main in -lGLES_CM... " >&6; }
+if test "${ac_cv_lib_GLES_CM_main+set}" = set; then :
   $as_echo_n "(cached) " >&6
 else
   ac_check_lib_save_LIBS=$LIBS
-LIBS="-lGL  $LIBS"
+LIBS="-lGLES_CM  $LIBS"
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -6824,17 +6824,17 @@ return main ();
 }
 _ACEOF
 if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_lib_GL_main=yes
+  ac_cv_lib_GLES_CM_main=yes
 else
-  ac_cv_lib_GL_main=no
+  ac_cv_lib_GLES_CM_main=no
 fi
 rm -f core conftest.err conftest.$ac_objext \
     conftest$ac_exeext conftest.$ac_ext
 LIBS=$ac_check_lib_save_LIBS
 fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_GL_main" >&5
-$as_echo "$ac_cv_lib_GL_main" >&6; }
-if test "x$ac_cv_lib_GL_main" = x""yes; then :
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_GLES_CM_main" >&5
+$as_echo "$ac_cv_lib_GLES_CM_main" >&6; }
+if test "x$ac_cv_lib_GLES_CM_main" = x""yes; then :
   have_gl_lib=yes
 else
   have_gl_lib=no
@@ -6876,8 +6876,8 @@ else
   have_opengl32_lib=no
 fi
 
-ac_fn_c_check_header_mongrel "$LINENO" "GL/gl.h" "ac_cv_header_GL_gl_h" "$ac_includes_default"
-if test "x$ac_cv_header_GL_gl_h" = x""yes; then :
+ac_fn_c_check_header_mongrel "$LINENO" "GLES/gl.h" "ac_cv_header_GLES_gl_h" "$ac_includes_default"
+if test "x$ac_cv_header_GLES_gl_h" = x""yes; then :
   have_gl_h=yes
 else
   have_gl_h=no
@@ -6906,7 +6906,7 @@ $as_echo "yes" >&6; }
        if test x$have_gl_h = xyes -a x$have_gl_lib = xyes ; then
          { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 $as_echo "yes" >&6; }
-         LIBS="$LIBS -lGL"
+         LIBS="$LIBS -lGLES_CM -lpdl"
          $as_echo "#define C_OPENGL 1" >>confdefs.h
 
        elif test x$have_gl_h = xyes -a x$have_opengl32_lib = xyes ; then

@@ -90,7 +90,7 @@ static struct {
 	float add_x,add_y;
 	Bit16s min_x,max_x,min_y,max_y;
 	float mickey_x,mickey_y;
-	float x,y;
+	float x,y, prev_x, prev_y;
 	button_event event_queue[QUEUE_SIZE];
 	Bit8u events;//Increase if QUEUE_SIZE >255 (currently 32)
 	Bit16u sub_seg,sub_ofs;
@@ -493,6 +493,21 @@ void Mouse_CursorMoved2(int clipw, int cliph, int x, int y)
 {
     mouse.x = ((float)mouse.max_x * x) / clipw;
     mouse.y = ((float)mouse.max_y * y) / cliph;
+
+#if 0
+    printf("pos [px:%2.2f py:%2.2f cx:%2.2f cy:%2.2f]\n",
+            mouse.prev_x, mouse.prev_y, mouse.x, mouse.y);
+#endif
+
+	mouse.mickey_x += mouse.x - mouse.prev_x;
+	mouse.mickey_y += mouse.y - mouse.prev_y;
+
+#if 0
+    printf("mic [mx:%2.2f my:%2.2f]\n", mouse.mickey_x, mouse.mickey_y);
+#endif
+
+    mouse.prev_x = mouse.x;
+    mouse.prev_y = mouse.y;
 
 	Mouse_AddEvent(MOUSE_HAS_MOVED);
 	DrawCursor();
