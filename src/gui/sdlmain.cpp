@@ -200,6 +200,7 @@ struct SDL_Block {
 		bool pixel_data_range;
 #endif
 	} opengl;
+    bool rotate;
 #endif
 	struct {
 		SDL_Surface * surface;
@@ -1109,6 +1110,7 @@ static void GUI_StartUp(Section * sec) {
 
 	sdl.desktop.fullscreen=section->Get_bool("fullscreen");
 	sdl.wait_on_error=section->Get_bool("waitonerror");
+    sdl.rotate = section->Get_bool("rotate");
 
 	Prop_multival* p=section->Get_multival("priority");
 	std::string focus = p->GetSection()->Get_string("active");
@@ -1437,6 +1439,18 @@ void GFX_Events() {
 	}
 #endif
 	while (SDL_PollEvent(&event)) {
+        if(event.key.keysym.sym == 231) {
+            event.type = SDL_MOUSEBUTTONDOWN;
+            event.button.state = SDL_PRESSED;
+            event.button.button = SDL_BUTTON_RIGHT;
+        }
+
+        if(event.key.keysym.sym == 229) {
+            event.type = SDL_MOUSEBUTTONUP;
+            event.button.state = SDL_RELEASED;
+            event.button.button = SDL_BUTTON_RIGHT;
+        }
+
 		switch (event.type) {
 		case SDL_ACTIVEEVENT:
 			if (event.active.state & SDL_APPINPUTFOCUS) {
@@ -1644,6 +1658,9 @@ void Config_Add_SDL() {
 	Pstring->Set_help("Scale the window to this size IF the output device supports hardware scaling.\n"
 	                  "  (output=surface does not!)");
 
+	Pbool = sdl_sec->Add_bool("rotate",Property::Changeable::Always,false);
+	Pbool->Set_help("Rotate screen -90 degree(counter-clockwise).)");
+     
 	const char* outputs[] = {
 		"surface", "overlay",
 #if C_OPENGL
