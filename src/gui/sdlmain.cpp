@@ -64,7 +64,7 @@ PDL_ScreenMetrics screenMetrics;
 #include "SDL_opengles.h"
 #define TEXSIZE         128
 #define MAX_TEXTURES    48
-#define MAX_VERTICES    128
+#define MAX_VERTICES    256
 
 #ifndef APIENTRY
 #define APIENTRY
@@ -200,7 +200,7 @@ struct SDL_Block {
 		bool pixel_data_range;
 #endif
 	} opengl;
-    bool rotate;
+    bool rotatescreen;
 #endif
 	struct {
 		SDL_Surface * surface;
@@ -256,7 +256,7 @@ GLfloat gl_coords[4*2] =
 		0.0f, 1.0f
 };
 
-Bit8u gl_tempbuff[128*128*4];
+Bit8u gl_tempbuff[TEXSIZE*TEXSIZE*4];
 #endif
 
 static bool metaLocked[2];
@@ -634,6 +634,10 @@ dosurface:
 		if(gl_texcols*gl_texsize<width) 	gl_texcols++;
 		if(gl_texrows*gl_texsize<height) 	gl_texrows++;
 		
+        if(sdl.rotatescreen == true) {
+            gl_texrows *= 2;
+        }
+
 		sdl.opengl.framebuf=malloc(gl_texcols*gl_texsize*gl_texrows*gl_texsize*4);		//32 bit color
 		sdl.opengl.pitch=gl_texcols*gl_texsize*4;
 				
@@ -646,7 +650,9 @@ dosurface:
             glTexImage2D(GL_TEXTURE_2D, 0, GL_BGRA, gl_texsize, gl_texsize, 0, GL_BGRA, GL_UNSIGNED_BYTE, 0);
         }
 
-        glRotatef(-90.0f, 0.0f, 0.0f, 1.0f);
+        if(sdl.rotatescreen == false) {
+            glRotatef(-90.0f, 0.0f, 0.0f, 1.0f);
+        }
 
 		glClearColor (0.0, 0.0, 0.0, 1.0);
 		glClear(GL_COLOR_BUFFER_BIT);
@@ -671,7 +677,11 @@ dosurface:
 		float tilew = glw / gl_texcols;
 		float tileh = glh / gl_texrows;
 		tilew *= (float)(gl_texcols*gl_texsize)/(float)width;
-		tileh *= (float)(gl_texrows*gl_texsize)/(float)height;
+        if(sdl.rotatescreen == true) {
+            tileh *= (float)(gl_texrows*gl_texsize)/(float)height/2;
+        } else {
+            tileh *= (float)(gl_texrows*gl_texsize)/(float)height;
+        }
 		float offx = glx;
 		float offy = gly;
 
@@ -680,7 +690,7 @@ dosurface:
                 gl_texcols, gl_texrows, gl_texsize, width, height, tilew, tileh);
 #endif
 
-        for(int cRow=0; cRow<gl_texcols; cRow++) {
+        for(int cRow=0; cRow<gl_texrows; cRow++) {
             offx = glx;
             for(int cCol=0; cCol<gl_texcols; cCol++) {
 #if 0
@@ -928,6 +938,21 @@ void GFX_EndUpdate( const Bit16u *changedLines ) {
 				}
 				index++;
 			}
+
+            if(sdl.rotatescreen == true) {
+                int starttex = gl_texrows*gl_texcols/2;
+                memset(gl_tempbuff, 0x00, TEXSIZE*TEXSIZE*4);
+
+                for(int tex=starttex; tex<gl_texrows*gl_texcols; tex++) {
+                    glBindTexture(GL_TEXTURE_2D, sdl.opengl.textures[tex]);
+                    glTexSubImage2D(GL_TEXTURE_2D, 0, 
+                            0, 0, 
+                            gl_texsize, gl_texsize, 
+                            GL_BGRA,
+                            GL_UNSIGNED_BYTE, gl_tempbuff);
+                }
+            }
+
 			// do actual gl drawing here
             glMatrixMode( GL_TEXTURE );
             glLoadIdentity();
@@ -1110,7 +1135,7 @@ static void GUI_StartUp(Section * sec) {
 
 	sdl.desktop.fullscreen=section->Get_bool("fullscreen");
 	sdl.wait_on_error=section->Get_bool("waitonerror");
-    sdl.rotate = section->Get_bool("rotate");
+    sdl.rotatescreen = section->Get_bool("rotatescreen");
 
 	Prop_multival* p=section->Get_multival("priority");
 	std::string focus = p->GetSection()->Get_string("active");
@@ -1197,6 +1222,10 @@ static void GUI_StartUp(Section * sec) {
 	/* Setup Mouse correctly if fullscreen */
 	if(sdl.desktop.fullscreen) GFX_CaptureMouse();
 
+#if C_OPENGL
+    sdl.desktop.want_type=SCREEN_OPENGL;
+    sdl.opengl.bilinear=true;
+#else
 	if (output == "surface") {
 		sdl.desktop.want_type=SCREEN_SURFACE;
 #if (HAVE_DDRAW_H) && defined(WIN32)
@@ -1205,18 +1234,11 @@ static void GUI_StartUp(Section * sec) {
 #endif
 	} else if (output == "overlay") {
 		sdl.desktop.want_type=SCREEN_OVERLAY;
-#if C_OPENGL
-	} else if (output == "opengl") {
-		sdl.desktop.want_type=SCREEN_OPENGL;
-		sdl.opengl.bilinear=true;
-	} else if (output == "openglnb") {
-		sdl.desktop.want_type=SCREEN_OPENGL;
-		sdl.opengl.bilinear=false;
-#endif
 	} else {
 		LOG_MSG("SDL:Unsupported output device %s, switching back to surface",output.c_str());
 		sdl.desktop.want_type=SCREEN_SURFACE;//SHOULDN'T BE POSSIBLE anymore
 	}
+#endif
 
 	sdl.overlay=0;
 #if C_OPENGL
@@ -1362,17 +1384,22 @@ static void HandleMouseMotion(SDL_MouseMotionEvent * motion) {
 
 	if (sdl.mouse.locked || !sdl.mouse.autoenable) {
         if(sdl.desktop.want_type == SCREEN_OPENGL) {
-            Uint16 x, y;
+            if(sdl.rotatescreen == true) {
+                motion->x = ((sdl.draw.width-1) * motion->x) / (screenMetrics.horizontalPixels - 1);
+                motion->y = ((sdl.draw.height-1) * motion->y * 2) / (screenMetrics.verticalPixels - 1);
+            } else {
+                Uint16 x, y;
 
-            x = motion->x;
-            y = motion->y;
+                x = motion->x;
+                y = motion->y;
 
-            /* swap coordinate from vertical to horizontal */
-            motion->x = y;
-            motion->y = (screenMetrics.horizontalPixels -1) - x;
+                /* swap coordinate from vertical to horizontal */
+                motion->x = y;
+                motion->y = (screenMetrics.horizontalPixels -1) - x;
 
-            motion->x = ((sdl.draw.width-1) * motion->x) / (screenMetrics.verticalPixels - 1);
-            motion->y = ((sdl.draw.height-1) * motion->y) / (screenMetrics.horizontalPixels - 1);
+                motion->x = ((sdl.draw.width-1) * motion->x) / (screenMetrics.verticalPixels - 1);
+                motion->y = ((sdl.draw.height-1) * motion->y) / (screenMetrics.horizontalPixels - 1);
+            }
 
             rel = true;
         }
@@ -1658,7 +1685,7 @@ void Config_Add_SDL() {
 	Pstring->Set_help("Scale the window to this size IF the output device supports hardware scaling.\n"
 	                  "  (output=surface does not!)");
 
-	Pbool = sdl_sec->Add_bool("rotate",Property::Changeable::Always,false);
+	Pbool = sdl_sec->Add_bool("rotatescreen",Property::Changeable::Always,false);
 	Pbool->Set_help("Rotate screen -90 degree(counter-clockwise).)");
      
 	const char* outputs[] = {

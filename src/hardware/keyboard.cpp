@@ -90,9 +90,9 @@ static preKeyMap hwPreSymKeyMap[_MAX_KEYPAD_NUM] = {
     {KBD_z, KBD_pause, false},          /* z -> pause */
     {KBD_comma, KBD_grave, false},      /* , -> ` */
     {KBD_period, KBD_6, true},          /* . -> ^ */
+    {KBD_q, KBD_tab, false},            /* q -> tab */
 
     /* useless but marked as reserved */
-    {KBD_q, KBD_q, false},  /* q -> q */
     {KBD_w, KBD_w, false},  /* w -> w */
     {KBD_a, KBD_a, false},  /* a -> a */
     {KBD_s, KBD_s, false},  /* s -> s */
