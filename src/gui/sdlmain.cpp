@@ -1466,13 +1466,13 @@ void GFX_Events() {
 	}
 #endif
 	while (SDL_PollEvent(&event)) {
-        if(event.key.keysym.sym == 231) {
+        if(event.type == SDL_KEYDOWN && event.key.keysym.sym == 231) {
             event.type = SDL_MOUSEBUTTONDOWN;
             event.button.state = SDL_PRESSED;
             event.button.button = SDL_BUTTON_RIGHT;
         }
 
-        if(event.key.keysym.sym == 229) {
+        if(event.type == SDL_KEYUP && event.key.keysym.sym == 231) {
             event.type = SDL_MOUSEBUTTONUP;
             event.button.state = SDL_RELEASED;
             event.button.button = SDL_BUTTON_RIGHT;
